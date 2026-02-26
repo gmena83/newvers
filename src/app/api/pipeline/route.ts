@@ -384,16 +384,17 @@ Focus on: GOVERNANCE.md hierarchy compliance, consistency between MISSION.md and
                             ?.filter((fr) => fr.recommendations.length > 0)
                             ?.slice(0, 5) || [];
 
-                        for (const fileReview of filesToFix) {
-                            if (cancelled) { controller.close(); return; }
+                        await Promise.all(
+                            filesToFix.map(async (fileReview) => {
+                                if (cancelled) return;
 
-                            emit("substep", {
-                                stepId: "refinement",
-                                substep: `Improving ${fileReview.fileName} (score: ${fileReview.score || "N/A"}/100)`,
-                            });
+                                emit("substep", {
+                                    stepId: "refinement",
+                                    substep: `Improving ${fileReview.fileName} (score: ${fileReview.score || "N/A"}/100)`,
+                                });
 
-                            const improved = await generateText(
-                                `You are improving an architecture document based on reviewer feedback. Apply ALL the improvements listed below. Make SUBSTANTIAL changes — do not just rephrase. Add missing content, fix structural issues, and ensure cross-file consistency.
+                                const improved = await generateText(
+                                    `You are improving an architecture document based on reviewer feedback. Apply ALL the improvements listed below. Make SUBSTANTIAL changes — do not just rephrase. Add missing content, fix structural issues, and ensure cross-file consistency.
 
 SPECIFIC ISSUES TO FIX IN THIS FILE:
 ${(fileReview.issues || []).map(i => `- ${i}`).join("\n")}
@@ -408,17 +409,26 @@ CONSISTENCY ISSUES (apply if relevant to this file):
 ${(review.consistencyIssues || []).map(c => `- ${c}`).join("\n")}
 
 Return ONLY the complete improved markdown. Do not include explanations or commentary.`,
-                                `Improve this file:\n\n${generatedFiles[fileReview.fileName]}`,
-                                { maxTokens: 8192 }
-                            );
-                            generatedFiles[fileReview.fileName] = improved;
+                                    `Improve this file:\n\n${generatedFiles[fileReview.fileName]}`,
+                                    { maxTokens: 8192 }
+                                );
 
-                            emit("file_generated", {
-                                stepId: "refinement",
-                                fileName: fileReview.fileName,
-                                content: improved,
-                                isRefinement: true,
-                            });
+                                if (cancelled) return;
+
+                                generatedFiles[fileReview.fileName] = improved;
+
+                                emit("file_generated", {
+                                    stepId: "refinement",
+                                    fileName: fileReview.fileName,
+                                    content: improved,
+                                    isRefinement: true,
+                                });
+                            })
+                        );
+
+                        if (cancelled) {
+                            controller.close();
+                            return;
                         }
 
                         emit("step_complete", {
