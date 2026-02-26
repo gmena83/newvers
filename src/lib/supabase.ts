@@ -1,7 +1,13 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
 function isValidUrl(val: string | undefined): val is string {
-    return !!val && val.startsWith("http");
+    if (!val) return false;
+    try {
+        const url = new URL(val);
+        return url.protocol === "http:" || url.protocol === "https:";
+    } catch (_) {
+        return false;
+    }
 }
 
 let _client: SupabaseClient | null = null;
