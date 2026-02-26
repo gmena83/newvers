@@ -11,7 +11,6 @@ import {
 import {
     Upload,
     Mic,
-    FileText,
     Loader2,
     Check,
     AlertCircle,
@@ -32,7 +31,6 @@ export default function IntakeForm({ onSubmitSuccess }: IntakeFormProps) {
     const [pdfProcessing, setPdfProcessing] = useState(false);
     const [audioDragOver, setAudioDragOver] = useState(false);
     const [aiSuggesting, setAiSuggesting] = useState(false);
-    const [aiReasoning, setAiReasoning] = useState<string | null>(null);
     const [techLocked, setTechLocked] = useState(false);
 
     const [form, setForm] = useState<ProjectFormData>({
@@ -55,6 +53,7 @@ export default function IntakeForm({ onSubmitSuccess }: IntakeFormProps) {
         data_privacy_security: "",
         audio_transcript: "",
         brandbook_text: "",
+        ai_reasoning: "",
     });
 
     const updateField = (field: keyof ProjectFormData, value: string) => {
@@ -72,7 +71,7 @@ export default function IntakeForm({ onSubmitSuccess }: IntakeFormProps) {
     const handleAiSuggest = async () => {
         if (techLocked) return;
         setAiSuggesting(true);
-        setAiReasoning(null);
+        updateField("ai_reasoning", ""); // Clear previous reasoning
         setErrors((prev) => {
             const next = { ...prev };
             delete next.aiSuggest;
@@ -103,7 +102,7 @@ export default function IntakeForm({ onSubmitSuccess }: IntakeFormProps) {
             updateField("tech_stack_backend", data.backend || "");
             updateField("tech_stack_database", data.database || "");
             updateField("tech_stack_hosting", data.hosting || "");
-            setAiReasoning(data.reasoning || null);
+            updateField("ai_reasoning", data.reasoning || "");
         } catch (err: unknown) {
             const message = err instanceof Error ? err.message : "AI suggestion failed";
             setErrors((prev) => ({ ...prev, aiSuggest: message }));
@@ -347,17 +346,17 @@ export default function IntakeForm({ onSubmitSuccess }: IntakeFormProps) {
                 </div>
 
                 {/* AI Reasoning Toast */}
-                {aiReasoning && (
+                {form.ai_reasoning && (
                     <div className="ai-reasoning-toast animate-fade-in">
                         <Sparkles className="h-4 w-4 text-primary shrink-0 mt-0.5" />
                         <div>
                             <p className="text-xs font-semibold text-primary mb-1">AI Recommendation</p>
-                            <p className="text-xs text-muted leading-relaxed">{aiReasoning}</p>
+                            <p className="text-xs text-muted leading-relaxed">{form.ai_reasoning}</p>
                         </div>
                         <button
                             type="button"
                             className="text-muted hover:text-foreground text-xs shrink-0"
-                            onClick={() => setAiReasoning(null)}
+                            onClick={() => updateField("ai_reasoning", "")}
                         >
                             ✕
                         </button>

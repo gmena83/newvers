@@ -100,6 +100,31 @@ export const FILE_ORDER: GeneratedFile[] = [
     },
 ];
 
+// Define dependency groups for parallel processing
+export const PARALLEL_GROUPS = [
+    // Batch 1: Governance & Mission (Sequential foundation)
+    ["GOVERNANCE.md"],
+    ["MISSION.md"],
+
+    // Batch 2: Data Model (Crucial dependency for many)
+    ["DATA_MODEL.md"],
+
+    // Batch 3: Tech Stack (Depends on Data Model)
+    ["TECH_STACK.md"],
+
+    // Batch 4: Parallelizable Core Logic
+    ["SKILLS.md", "USER_FLOWS.md", "CONSTRAINTS.md"],
+
+    // Batch 5: Implementation Details
+    ["UI.md", "AGENTS.md", "TESTING.md", "BRAND_VOICE.md"],
+
+    // Batch 6: Operations & Roadmap
+    ["ROADMAP.md"],
+
+    // Batch 7: Final Instructions
+    ["NEXT_STEPS.md"]
+];
+
 export const BRAND_VOICE_OPTIONS = [
     "Professional & Warm",
     "Highly Technical & Concise",
