@@ -48,6 +48,12 @@ export async function POST(req: NextRequest) {
         const committedFiles: string[] = [];
 
         for (const [fileName, content] of Object.entries(files)) {
+            // Security: Validate fileName to prevent path traversal
+            if (!/^[a-zA-Z0-9._-]+$/.test(fileName) || fileName.includes("..")) {
+                console.warn(`Skipping invalid filename: ${fileName}`);
+                continue;
+            }
+
             // Base64 encode the content
             const encoded = Buffer.from(content as string).toString("base64");
 
