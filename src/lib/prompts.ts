@@ -250,8 +250,10 @@ Structure:
 
 IMPORTANT: Include an "Agent_Architect" agent whose sole role is governance enforcement. This agent has READ access to ALL files and WRITE access to NONE. Before any other agent commits code, Agent_Architect must validate it against the GOVERNANCE.md hierarchy and kill-switch rules.
 
+DYNAMISM: Analyze the project description and tech stack. If the project requires specialized knowledge (e.g., 3D graphics, crypto, data science), create a specialized agent role for it (e.g., "Physics_Specialist", "SmartContract_Auditor", "DataScience_Lead").
+
 Reference the tech stack and roadmap to define appropriate agent roles.`,
-            user: `Generate AGENTS.md.\n\nTECH_STACK.md:\n${previousFiles["TECH_STACK.md"] || "N/A"}\n\nSKILLS.md:\n${previousFiles["SKILLS.md"] || "N/A"}\n\nROADMAP.md:\n${previousFiles["ROADMAP.md"] || "N/A"}`,
+            user: `Generate AGENTS.md.\n\nPROJECT DESCRIPTION:\n${data.description}\n\nTECH_STACK.md:\n${previousFiles["TECH_STACK.md"] || "N/A"}\n\nSKILLS.md:\n${previousFiles["SKILLS.md"] || "N/A"}\n\nROADMAP.md:\n${previousFiles["ROADMAP.md"] || "N/A"}`,
         },
         // 10 — BRAND_VOICE.md
         {

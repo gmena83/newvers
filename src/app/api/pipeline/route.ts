@@ -2,30 +2,10 @@ import { NextRequest } from "next/server";
 import { generateText } from "@/lib/gemini";
 import { anthropicGenerate } from "@/lib/anthropic";
 import { openaiGenerate } from "@/lib/openai";
-import { buildFormContext } from "@/lib/pipeline";
+import { buildFormContext, validateGovernance } from "@/lib/pipeline";
 import { researchTechStack, researchMarketAnalysis } from "@/lib/research";
 import { buildPrompt } from "@/lib/prompts";
-import { FILE_ORDER } from "@/lib/constants";
-
-/* ═══════════════════════════════════════
-   SSE PIPELINE ORCHESTRATOR
-   ═══════════════════════════════════════
-   
-   Model Assignments (with Gemini fallbacks):
-   ┌─────────────────────────────┬────────────────────────────┬─────────────────────────────────┐
-   │ Step                        │ Primary                    │ Fallback (retry once → Gemini)  │
-   ├─────────────────────────────┼────────────────────────────┼─────────────────────────────────┤
-   │ 1. Project Brief            │ Gemini 3.1 Pro Preview     │ (already Gemini)                │
-   │ 2. Deep Search              │ Perplexity sonar-deep      │ Gemini deep-research-pro        │
-   │ 3. Market Analysis          │ Perplexity sonar-deep      │ Gemini deep-research-pro        │
-   │ 4. Knowledge Base           │ Claude Sonnet 4-6          │ Gemini 3.1 Pro Preview          │
-   │ 5. Report Delivery          │ Claude Sonnet 4-6          │ Gemini 3.1 Pro Preview          │
-   │   ── PAUSE ── User reviews report, can edit, then resumes                                  │
-   │ 6. Architecture Generation  │ Gemini 3.1 Pro Preview     │ (already Gemini)                │
-   │ 7. Senior Dev Review        │ GPT-5.2                    │ Gemini 3.1 Pro Preview          │
-   │ 8. Refinement               │ Gemini 3.1 Pro Preview     │ (already Gemini)                │
-   └─────────────────────────────┴────────────────────────────┴─────────────────────────────────┘
-   ═══════════════════════════════════════ */
+import { FILE_ORDER, PARALLEL_GROUPS } from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
 
@@ -74,7 +54,6 @@ export async function POST(req: NextRequest) {
                 if (!cancelled) sendEvent(controller, event, data);
             }
 
-            /** Shared fallback callback — emits SSE event when a provider fails */
             const onFallback = (provider: string, error: Error, fallbackModel: string) => {
                 emit("fallback_activated", {
                     provider,
@@ -84,12 +63,8 @@ export async function POST(req: NextRequest) {
             };
 
             try {
-                /* ══════════════════════════════════════════════════════
-                   PHASE 1: RESEARCH (Steps 1-5) — skipped if resuming
-                   ══════════════════════════════════════════════════════ */
                 if (resumeFrom !== "architecture") {
-
-                    /* ── STEP 1: PROJECT BRIEF — Gemini ── */
+                     /* ── STEP 1: PROJECT BRIEF — Gemini ── */
                     emit("step_start", { stepId: "brief", stepIndex: 0 });
                     emit("substep", { stepId: "brief", substep: "Analyzing form data with Gemini" });
 
@@ -161,9 +136,6 @@ Structure the report as:
                     emit("report_ready", { report: formattedReport });
                     emit("step_complete", { stepId: "report", output: "Report ready for review" });
 
-                    /* ══════════════════════════════════════════════
-                       ── PAUSE ── Wait for user to review report
-                       ══════════════════════════════════════════════ */
                     emit("pipeline_paused", {
                         message: "Report ready. Review, edit if needed, then resume.",
                         resumeContext: {
@@ -174,15 +146,13 @@ Structure the report as:
                         },
                     });
 
-                    // Send explicit end-of-stream signal and allow time to flush
                     emit("stream_end", { reason: "paused" });
                     await new Promise((resolve) => setTimeout(resolve, 300));
                     controller.close();
                     return;
 
                 } else {
-                    /* ── Resuming: mark steps 1-5 as already complete ── */
-                    for (let i = 0; i < 5; i++) {
+                     for (let i = 0; i < 5; i++) {
                         const stepIds = ["brief", "research", "market", "knowledge", "report"];
                         emit("step_complete", {
                             stepId: stepIds[i],
@@ -191,50 +161,77 @@ Structure the report as:
                             alreadyDone: true,
                         });
                     }
-                    // Use provided knowledge base for architecture context
                     knowledgeBase = resumeContext.knowledgeBase || "";
                 }
 
-                /* ══════════════════════════════════════════════════════
-                   PHASE 2: ARCHITECTURE (Steps 6-8)
-                   ══════════════════════════════════════════════════════ */
-
-                /* ── STEP 6: ARCHITECTURE GENERATION — Gemini ── */
+                /* ── STEP 6: ARCHITECTURE GENERATION (PARALLEL) ── */
                 emit("step_start", { stepId: "architecture", stepIndex: 5 });
 
-                for (let i = 0; i < FILE_ORDER.length; i++) {
+                let filesGeneratedCount = 0;
+                const totalFiles = FILE_ORDER.length;
+
+                for (const group of PARALLEL_GROUPS) {
                     if (cancelled) { controller.close(); return; }
 
-                    const file = FILE_ORDER[i]!;
-                    emit("substep", {
-                        stepId: "architecture",
-                        substep: `Generating ${file.name} with Gemini`,
-                        fileIndex: i,
-                        totalFiles: FILE_ORDER.length,
+                    const promises = group.map(async (fileName) => {
+                        const fileIndex = FILE_ORDER.findIndex(f => f.name === fileName);
+                        if (fileIndex === -1) return;
+
+                        emit("substep", {
+                            stepId: "architecture",
+                            substep: `Generating ${fileName} with Gemini`,
+                            fileIndex: filesGeneratedCount,
+                            totalFiles,
+                        });
+
+                        const { system, user } = buildPrompt(fileIndex, formData, generatedFiles);
+                        const enhancedSystem = `${system}\n\nIMPORTANT CONTEXT FROM RESEARCH:\n${knowledgeBase.substring(0, 3000)}`;
+
+                        const content = await generateText(enhancedSystem, user, { maxTokens: 8192 });
+
+                        // Run Governance Validator immediately after generation
+                        const violations = validateGovernance(
+                            fileName,
+                            content,
+                            generatedFiles["TECH_STACK.md"] // Pass tech stack context if available
+                        );
+
+                        if (violations.length > 0) {
+                            emit("governance_violation", {
+                                fileName,
+                                violations
+                            });
+                            // We could choose to regenerate here, but for now we flag it.
+                            // A re-generation logic would be: if (violations.some(v => v.severity === 'error')) { ... }
+                        }
+
+                        return { fileName, content, violations };
                     });
 
-                    const { system, user } = buildPrompt(i, formData, generatedFiles);
-                    const enhancedSystem = `${system}\n\nIMPORTANT CONTEXT FROM RESEARCH:\n${knowledgeBase.substring(0, 3000)}`;
+                    const results = await Promise.all(promises);
 
-                    const content = await generateText(enhancedSystem, user, { maxTokens: 8192 });
-                    generatedFiles[file.name] = content;
-
-                    emit("file_generated", {
-                        stepId: "architecture",
-                        fileName: file.name,
-                        content,
-                        fileIndex: i,
-                        totalFiles: FILE_ORDER.length,
-                    });
+                    for (const result of results) {
+                        if (result) {
+                            generatedFiles[result.fileName] = result.content;
+                            filesGeneratedCount++;
+                            emit("file_generated", {
+                                stepId: "architecture",
+                                fileName: result.fileName,
+                                content: result.content,
+                                fileIndex: filesGeneratedCount,
+                                totalFiles,
+                                violations: result.violations
+                            });
+                        }
+                    }
                 }
 
                 emit("step_complete", {
                     stepId: "architecture",
-                    output: `Generated ${FILE_ORDER.length} architecture files`,
+                    output: `Generated ${totalFiles} architecture files`,
                 });
-                if (cancelled) { controller.close(); return; }
 
-                /* ── STEP 7 & 8: SENIOR REVIEW + REFINEMENT — GPT-5.2 + Gemini ── */
+                 /* ── STEP 7 & 8: SENIOR REVIEW + REFINEMENT — GPT-5.2 + Gemini ── */
                 let reviewScore = 0;
                 let reviewIteration = 0;
                 const maxIterations = 3;

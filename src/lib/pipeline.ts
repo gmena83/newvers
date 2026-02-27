@@ -45,7 +45,7 @@ export interface PipelineEvent {
     type: "step_start" | "step_progress" | "step_complete" | "step_failed"
     | "pipeline_complete" | "pipeline_failed" | "pipeline_stopped"
     | "file_generated" | "review_result" | "clarification_needed"
-    | "chat_message" | "report_ready" | "substep";
+    | "chat_message" | "report_ready" | "substep" | "governance_violation";
     stepId?: string;
     data: Record<string, unknown>;
     timestamp: number;
@@ -149,5 +149,77 @@ TIMELINE & SCOPE: ${data.timeline_scope}
 DATA PRIVACY / SECURITY: ${data.data_privacy_security}
 ${data.audio_transcript ? `\nTRANSCRIPT FROM MEETING/AUDIO:\n${data.audio_transcript}` : ""}
 ${data.brandbook_text ? `\nBRANDBOOK EXTRACTED TEXT:\n${data.brandbook_text}` : ""}
+${data.ai_reasoning ? `\nAI SUGGESTED TECH STACK REASONING:\n${data.ai_reasoning}` : ""}
 `.trim();
+}
+
+/* ═══════════════════════════════════════
+   GOVERNANCE VALIDATOR
+   ═══════════════════════════════════════ */
+
+export interface GovernanceViolation {
+    rule: string;
+    file: string;
+    violation: string;
+    severity: "warning" | "error";
+}
+
+export function validateGovernance(
+    fileName: string,
+    content: string,
+    techStackContext?: string
+): GovernanceViolation[] {
+    const violations: GovernanceViolation[] = [];
+
+    // 1. Auth Storage Check (Kill-Switch)
+    if (/localStorage|sessionStorage|cookies\.set\s*\(\s*['"]token['"]/.test(content)) {
+        if (!/HTTP-only|HttpOnly/i.test(content)) {
+            violations.push({
+                rule: "Auth Token Storage",
+                file: fileName,
+                violation: "Detected potential unsafe storage of auth tokens (localStorage/sessionStorage) without HttpOnly cookie enforcement.",
+                severity: "error"
+            });
+        }
+    }
+
+    // 2. 3D Physics Check (Kill-Switch)
+    if (content.includes("@react-three/cannon")) {
+        violations.push({
+            rule: "3D Physics Engine",
+            file: fileName,
+            violation: "Found usage of @react-three/cannon. Only @react-three/rapier is allowed per GOVERNANCE.md.",
+            severity: "error"
+        });
+    }
+
+    // 3. UI Library Compliance (Context-aware)
+    if (techStackContext && techStackContext.includes("Tailwind CSS")) {
+        if (content.includes("shadcn/ui") || content.includes("@radix-ui")) {
+             // Only flag if not explicitly whitelisted in the provided tech stack context
+             // This is a heuristic; a perfect check needs the full TECH_STACK.md parsed
+             if (!techStackContext.includes("shadcn") && !techStackContext.includes("radix")) {
+                 violations.push({
+                    rule: "UI Library Compliance",
+                    file: fileName,
+                    violation: "Detected shadcn/ui or Radix UI usage when Tailwind CSS is the mandated framework.",
+                    severity: "error"
+                 });
+             }
+        }
+    }
+
+    // 4. Database Parity (Testing vs Production)
+    if (fileName === "TESTING.md") {
+        if (content.includes("SQLite") && techStackContext && techStackContext.includes("PostgreSQL")) {
+            violations.push({
+                rule: "Database Parity",
+                file: fileName,
+                violation: "TESTING.md suggests SQLite but production uses PostgreSQL. Test environment must match production.",
+                severity: "error"
+            });
+        }
+    }
+
+    return violations;
 }

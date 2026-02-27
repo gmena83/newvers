@@ -20,6 +20,7 @@ export const projectSchema = z.object({
     data_privacy_security: z.string(),
     audio_transcript: z.string().optional().default(""),
     brandbook_text: z.string().optional().default(""),
+    ai_reasoning: z.string().optional().default(""),
 });
 
 export type ProjectFormData = z.infer<typeof projectSchema>;
