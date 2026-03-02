@@ -1,32 +1,44 @@
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 import { motion } from "framer-motion";
 import { CheckCircle2, Github, Download, Eye, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useGenerator } from "@/contexts/GeneratorContext";
 import GitHubExportModal from "./GitHubExportModal";
+import ViewFilesModal from "./ViewFilesModal";
+import JSZip from "jszip";
 
 const PipelineComplete: React.FC = () => {
-  const { pipelineState, generatedFiles, reviewResult, elapsedTime, resetPipeline } = useGenerator();
+  const { pipelineState, generatedFiles, researchReport, reviewResult, elapsedTime, resetPipeline } = useGenerator();
   const [showGithub, setShowGithub] = useState(false);
   const [showFiles, setShowFiles] = useState(false);
 
   if (pipelineState !== "complete") return null;
 
-  const downloadZip = () => {
-    // Simple multi-file download as individual files via Blob
-    generatedFiles.forEach((file) => {
-      const blob = new Blob([file.content], { type: "text/markdown" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = file.filename;
-      a.click();
-      URL.revokeObjectURL(url);
-    });
-  };
-
   const minutes = Math.floor(elapsedTime / 60);
   const seconds = elapsedTime % 60;
+
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const downloadZip = useCallback(async () => {
+    const zip = new JSZip();
+
+    // Add all generated architecture files
+    for (const file of generatedFiles) {
+      zip.file(file.filename, file.content);
+    }
+
+    // Add research report if available
+    if (researchReport) {
+      zip.file("RESEARCH_REPORT.md", researchReport);
+    }
+
+    const blob = await zip.generateAsync({ type: "blob" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "architecture-files.zip";
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [generatedFiles, researchReport]);
 
   return (
     <>
@@ -69,14 +81,14 @@ const PipelineComplete: React.FC = () => {
 
         {/* Action buttons */}
         <div className="flex flex-wrap justify-center gap-3">
-          <Button variant="outline" onClick={() => setShowFiles(!showFiles)} className="border-white/[0.15] text-foreground/70 text-xs">
+          <Button variant="outline" onClick={() => setShowFiles(true)} className="border-white/[0.15] text-foreground/70 text-xs">
             <Eye className="w-3.5 h-3.5 mr-1.5" /> View Files
           </Button>
           <Button onClick={() => setShowGithub(true)} className="turbo-gradient-bg text-white border-0 text-xs">
             <Github className="w-3.5 h-3.5 mr-1.5" /> Export to GitHub
           </Button>
           <Button variant="outline" onClick={downloadZip} className="border-white/[0.15] text-foreground/70 text-xs">
-            <Download className="w-3.5 h-3.5 mr-1.5" /> Download Files
+            <Download className="w-3.5 h-3.5 mr-1.5" /> Download ZIP
           </Button>
           <Button variant="ghost" onClick={resetPipeline} className="text-muted-foreground text-xs">
             <RotateCcw className="w-3.5 h-3.5 mr-1.5" /> New Project
@@ -85,6 +97,7 @@ const PipelineComplete: React.FC = () => {
       </motion.div>
 
       <GitHubExportModal open={showGithub} onClose={() => setShowGithub(false)} />
+      <ViewFilesModal open={showFiles} onClose={() => setShowFiles(false)} />
     </>
   );
 };

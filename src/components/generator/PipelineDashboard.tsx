@@ -8,6 +8,7 @@ import FileChipsGrid from "./FileChipsGrid";
 import ReviewScoreCard from "./ReviewScoreCard";
 import ReviewLoopDecision from "./ReviewLoopDecision";
 import PipelineComplete from "./PipelineComplete";
+import PipelineErrorUI from "./PipelineErrorUI";
 import { useGenerator } from "@/contexts/GeneratorContext";
 
 const PipelineDashboard: React.FC = () => {
@@ -26,8 +27,8 @@ const PipelineDashboard: React.FC = () => {
       <div className="w-56 flex-shrink-0 glass-panel p-4 overflow-y-auto">
         <div className="flex items-center justify-between mb-4">
           <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">Pipeline</span>
-          {pipelineState === "running" && (
-            <span className="text-[10px] font-mono text-primary">
+          {(pipelineState === "running" || pipelineState === "paused") && (
+            <span className={`text-[10px] font-mono ${pipelineState === "paused" ? "text-amber-400" : "text-primary"}`}>
               {minutes}:{seconds.toString().padStart(2, "0")}
             </span>
           )}
@@ -37,13 +38,19 @@ const PipelineDashboard: React.FC = () => {
 
       {/* Main content */}
       <div className="flex-1 min-w-0 space-y-4 overflow-y-auto">
-        <SubstepFeed />
-        <ResearchReportCard />
-        <PipelinePauseUI />
-        <FileChipsGrid />
-        <ReviewScoreCard />
-        <ReviewLoopDecision />
-        <PipelineComplete />
+        {pipelineState === "failed" ? (
+          <PipelineErrorUI />
+        ) : (
+          <>
+            <SubstepFeed />
+            <ResearchReportCard />
+            <PipelinePauseUI />
+            <FileChipsGrid />
+            <ReviewScoreCard />
+            <ReviewLoopDecision />
+            <PipelineComplete />
+          </>
+        )}
       </div>
     </motion.div>
   );

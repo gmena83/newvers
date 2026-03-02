@@ -10,7 +10,7 @@ const StepProgress: React.FC = () => {
   return (
     <div className="space-y-1">
       {PIPELINE_STEPS.map((step, i) => {
-        const isActive = i === activeStep && pipelineState === "running";
+        const isActive = i === activeStep && (pipelineState === "running" || pipelineState === "paused");
         const isComplete = i < activeStep || pipelineState === "complete";
         const isPending = i > activeStep && pipelineState !== "complete";
 
@@ -20,9 +20,8 @@ const StepProgress: React.FC = () => {
             initial={{ opacity: 0, x: -10 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: i * 0.05 }}
-            className={`flex items-start gap-3 py-2.5 px-3 rounded-lg transition-all duration-300 ${
-              isActive ? "bg-white/[0.03]" : ""
-            } ${isPending ? "opacity-30" : ""}`}
+            className={`flex items-start gap-3 py-2.5 px-3 rounded-lg transition-all duration-300 ${isActive ? "bg-white/[0.03]" : ""
+              } ${isPending ? "opacity-30" : ""}`}
           >
             {/* Step indicator */}
             <div className="relative flex-shrink-0 mt-0.5">

@@ -73,7 +73,14 @@ export interface ReviewResult {
   attempt: number;
 }
 
-export type PipelineState = "idle" | "running" | "paused" | "complete";
+export interface ReviewHistoryEntry {
+  iteration: number;
+  score: number;
+  summary: string;
+  isBest: boolean;
+}
+
+export type PipelineState = "idle" | "running" | "paused" | "complete" | "failed";
 
 export type SSEEvent =
   | { type: "step_start"; data: { stepId: string; stepIndex: number } }
@@ -83,7 +90,7 @@ export type SSEEvent =
   | { type: "pipeline_paused"; data: Record<string, never> }
   | { type: "file_generated"; data: { fileName: string; content: string } }
   | { type: "review_result"; data: { score: number; summary: string; attempt: number } }
-  | { type: "review_loop_exhausted"; data: Record<string, never> }
+  | { type: "review_loop_exhausted"; data: { bestScore: number; bestIteration: number; reviewHistory: ReviewHistoryEntry[] } }
   | { type: "governance_violation"; data: { file: string; violation: string; severity: string } }
   | { type: "fallback_activated"; data: { provider: string; reason: string; fallbackModel: string } }
   | { type: "pipeline_complete"; data: Record<string, never> }

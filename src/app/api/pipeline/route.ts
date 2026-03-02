@@ -28,6 +28,7 @@ export async function POST(req: NextRequest) {
         market?: string;
         knowledgeBase?: string;
         report?: string;
+        singleRetry?: boolean;
     } = body.resumeContext || {};
 
     if (!formData) {
@@ -64,7 +65,7 @@ export async function POST(req: NextRequest) {
 
             try {
                 if (resumeFrom !== "architecture") {
-                     /* ── STEP 1: PROJECT BRIEF — Gemini ── */
+                    /* ── STEP 1: PROJECT BRIEF — Gemini ── */
                     emit("step_start", { stepId: "brief", stepIndex: 0 });
                     emit("substep", { stepId: "brief", substep: "Analyzing form data with Gemini" });
 
@@ -152,7 +153,7 @@ Structure the report as:
                     return;
 
                 } else {
-                     for (let i = 0; i < 5; i++) {
+                    for (let i = 0; i < 5; i++) {
                         const stepIds = ["brief", "research", "market", "knowledge", "report"];
                         emit("step_complete", {
                             stepId: stepIds[i],
@@ -170,12 +171,15 @@ Structure the report as:
                 let filesGeneratedCount = 0;
                 const totalFiles = FILE_ORDER.length;
 
+                // Issue 8: Sequential file generation within each batch for consistent ordering
                 for (const group of PARALLEL_GROUPS) {
                     if (cancelled) { controller.close(); return; }
 
-                    const promises = group.map(async (fileName) => {
+                    for (const fileName of group) {
+                        if (cancelled) { controller.close(); return; }
+
                         const fileIndex = FILE_ORDER.findIndex(f => f.name === fileName);
-                        if (fileIndex === -1) return;
+                        if (fileIndex === -1) continue;
 
                         emit("substep", {
                             stepId: "architecture",
@@ -201,28 +205,18 @@ Structure the report as:
                                 fileName,
                                 violations
                             });
-                            // We could choose to regenerate here, but for now we flag it.
-                            // A re-generation logic would be: if (violations.some(v => v.severity === 'error')) { ... }
                         }
 
-                        return { fileName, content, violations };
-                    });
-
-                    const results = await Promise.all(promises);
-
-                    for (const result of results) {
-                        if (result) {
-                            generatedFiles[result.fileName] = result.content;
-                            filesGeneratedCount++;
-                            emit("file_generated", {
-                                stepId: "architecture",
-                                fileName: result.fileName,
-                                content: result.content,
-                                fileIndex: filesGeneratedCount,
-                                totalFiles,
-                                violations: result.violations
-                            });
-                        }
+                        generatedFiles[fileName] = content;
+                        filesGeneratedCount++;
+                        emit("file_generated", {
+                            stepId: "architecture",
+                            fileName,
+                            content,
+                            fileIndex: filesGeneratedCount,
+                            totalFiles,
+                            violations
+                        });
                     }
                 }
 
@@ -231,10 +225,11 @@ Structure the report as:
                     output: `Generated ${totalFiles} architecture files`,
                 });
 
-                 /* ── STEP 7 & 8: SENIOR REVIEW + REFINEMENT — GPT-5.2 + Gemini ── */
+                /* ── STEP 7 & 8: SENIOR REVIEW + REFINEMENT — GPT-5.2 + Gemini ── */
                 let reviewScore = 0;
                 let reviewIteration = 0;
-                const maxIterations = 3;
+                // Issue 6: When singleRetry is true, only do 1 review cycle
+                const maxIterations = resumeContext.singleRetry ? 1 : 3;
 
                 // Track best-scoring iteration
                 let bestScore = 0;
